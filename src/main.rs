@@ -222,7 +222,6 @@ fn load_projects_from_env() -> HashMap<String, ProjectConfig> {
                 let default_accounts = env::var(&default_accounts_key)
                     .ok()
                     .and_then(|accounts_str| {
-                        println!("Default accounts string: {}", accounts_str);
                         // Try to parse as JSON first
                         let parsed: Result<Vec<DefaultAccount>, _> = serde_json::from_str(&accounts_str);
                         match parsed {
