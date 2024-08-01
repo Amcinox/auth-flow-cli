@@ -1,4 +1,4 @@
-# cognito-cli-auth (or your chosen name)
+# cognito-cli-auth 
 
 A command-line interface for user authentication with AWS Cognito.
 
