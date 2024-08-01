@@ -5,6 +5,10 @@ on:
     branches:
       - master
 
+permissions:
+  contents: write
+  discussions: write
+
 jobs:
   create_release:
     name: Create Release
@@ -14,7 +18,7 @@ jobs:
       version: ${{ steps.get_version.outputs.version }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Get version
         id: get_version
@@ -57,7 +61,7 @@ jobs:
             asset_name: auth-flow-cli-windows-${{ needs.create_release.outputs.version }}.exe
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     
     - name: Set up Rust
       uses: actions-rs/toolchain@v1
