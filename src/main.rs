@@ -30,8 +30,6 @@ struct AuthConfig {
     region: Region,
 }
 
-
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Check if .env file exists
@@ -39,80 +37,84 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("Error: .env file is missing. Please create a .env file with the required configuration.".into());
     }
 
-    let environment = select_environment()?;
-    load_env(&environment);
+    loop {
+        let environment = select_environment()?;
+        load_env(&environment);
 
-    let projects = load_projects_from_env();
+        let projects = load_projects_from_env();
 
+        if projects.is_empty() {
+            return Err("No projects found in the environment configuration.".into());
+        }
 
-    if projects.is_empty() {
-        return Err("No projects found in the environment configuration.".into());
-    }
+        println!("Select a project to login:");
+        for (i, (project_name, _)) in projects.iter().enumerate() {
+            println!("{}. {}", i + 1, project_name);
+        }
 
-    println!("Select a project to login:");
-    for (i, (project_name, _)) in projects.iter().enumerate() {
-        println!("{}. {}", i + 1, project_name);
-    }
+        let selected_project = get_user_input("Enter the number of your choice: ")?;
+        let project_index = selected_project.parse::<usize>()? - 1;
 
-    let selected_project = get_user_input("Enter the number of your choice: ")?;
-    let project_index = selected_project.parse::<usize>()? - 1;
+        if project_index >= projects.len() {
+            return Err("Invalid project selection".into());
+        }
 
-    if project_index >= projects.len() {
-        return Err("Invalid project selection".into());
-    }
+        let (project_name, project_config) = projects.iter().nth(project_index).unwrap();
+        println!("Selected project: {}", project_name);
 
-    let (project_name, project_config) = projects.iter().nth(project_index).unwrap();
-    println!("Selected project: {}", project_name);
+        let auth_config = AuthConfig {
+            pool_id: project_config.pool_id.clone(),
+            client_id: project_config.client_id.clone(),
+            region: project_config.region.parse()?,
+        };
 
+        let (username, password) = if let Some(default_accounts) = &project_config.default_accounts {
+            select_or_enter_credentials(default_accounts)?
+        } else {
+            println!("No default accounts found for this project.");
+            (
+                get_user_input("Enter your username: ")?,
+                read_password_with_prompt("Enter your password: ")?,
+            )
+        };
 
+        let client = CognitoIdentityProviderClient::new(auth_config.region);
 
-    let auth_config = AuthConfig {
-        pool_id: project_config.pool_id.clone(),
-        client_id: project_config.client_id.clone(),
-        region: project_config.region.parse()?,
-    };
+        let auth_result = client
+            .initiate_auth(InitiateAuthRequest {
+                auth_flow: "USER_PASSWORD_AUTH".to_string(),
+                client_id: auth_config.client_id.clone(),
+                auth_parameters: Some({
+                    let mut map = std::collections::HashMap::new();
+                    map.insert("USERNAME".to_string(), username);
+                    map.insert("PASSWORD".to_string(), password);
+                    map
+                }),
+                ..Default::default()
+            })
+            .await;
 
-    let (username, password) = if let Some(default_accounts) = &project_config.default_accounts {
-        select_or_enter_credentials(default_accounts)?
-    } else {
-        println!("No default accounts found for this project.");
-        (
-            get_user_input("Enter your username: ")?,
-            read_password_with_prompt("Enter your password: ")?,
-        )
-    };
-
-    let client = CognitoIdentityProviderClient::new(auth_config.region);
-
-    let auth_result = client
-        .initiate_auth(InitiateAuthRequest {
-            auth_flow: "USER_PASSWORD_AUTH".to_string(),
-            client_id: auth_config.client_id.clone(),
-            auth_parameters: Some({
-                let mut map = std::collections::HashMap::new();
-                map.insert("USERNAME".to_string(), username);
-                map.insert("PASSWORD".to_string(), password);
-                map
-            }),
-            ..Default::default()
-        })
-        .await;
-
-    match auth_result {
-        Ok(result) => {
-            if let Some(auth_result) = result.authentication_result {
-                println!("Authentication successful!");
-                println!("Payload:");
-                println!("  ID Token: {}", auth_result.id_token.unwrap_or_default());
-                println!("  Access Token: {}", auth_result.access_token.unwrap_or_default());
-                println!("  Refresh Token: {}", auth_result.refresh_token.unwrap_or_default());
-                println!("  Expires In: {} seconds", auth_result.expires_in.unwrap_or_default());
-            } else {
-                println!("Authentication failed. No authentication result returned.");
+        match auth_result {
+            Ok(result) => {
+                if let Some(auth_result) = result.authentication_result {
+                    println!("Authentication successful!");
+                    println!("Payload:");
+                    println!("  ID Token: {}", auth_result.id_token.unwrap_or_default());
+                    println!("  Access Token: {}", auth_result.access_token.unwrap_or_default());
+                    println!("  Refresh Token: {}", auth_result.refresh_token.unwrap_or_default());
+                    println!("  Expires In: {} seconds", auth_result.expires_in.unwrap_or_default());
+                } else {
+                    println!("Authentication failed. No authentication result returned.");
+                }
+            },
+            Err(e) => {
+                println!("Authentication error: {:?}", e);
             }
-        },
-        Err(e) => {
-            println!("Authentication error: {:?}", e);
+        }
+
+        let continue_choice = get_user_input("Do you want to continue? Type 'yes' to start over or 'no' to quit: ")?;
+        if continue_choice.trim().eq_ignore_ascii_case("no") {
+            break;
         }
     }
 
@@ -200,8 +202,6 @@ fn parse_custom_format(input: &str) -> Result<Vec<DefaultAccount>, Box<dyn std::
     accounts
 }
 
-
-
 fn load_projects_from_env() -> HashMap<String, ProjectConfig> {
     let mut projects = HashMap::new();
 
@@ -255,7 +255,6 @@ fn load_projects_from_env() -> HashMap<String, ProjectConfig> {
     projects
 }
 
-
 fn select_or_enter_credentials(default_accounts: &[DefaultAccount]) -> io::Result<(String, String)> {
     println!("Default accounts available:");
     for (i, account) in default_accounts.iter().enumerate() {
@@ -275,8 +274,6 @@ fn select_or_enter_credentials(default_accounts: &[DefaultAccount]) -> io::Resul
             let password = read_password_with_prompt("Enter your password: ")?;
             return Ok((username, password));
         }
-
         println!("Invalid choice. Please try again.");
     }
 }
-
