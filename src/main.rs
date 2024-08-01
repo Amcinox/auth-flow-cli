@@ -32,6 +32,11 @@ struct AuthConfig {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Change the current directory to the directory where the binary is located
+    let exe_path = env::current_exe()?;
+    let exe_dir = exe_path.parent().unwrap();
+    env::set_current_dir(exe_dir)?;
+
     // Check if .env file exists
     if !fs::metadata(".env").is_ok() {
         return Err("Error: .env file is missing. Please create a .env file with the required configuration.".into());
@@ -53,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         let selected_project = get_user_input("Enter the number of your choice: ")?;
-        let project_index = selected_project.parse::<usize>()? - 1;
+        let project_index = selected_project.parse::<usize>().map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))? - 1;
 
         if project_index >= projects.len() {
             return Err("Invalid project selection".into());
@@ -153,7 +158,7 @@ fn select_environment() -> io::Result<String> {
 
     loop {
         let choice = get_user_input("Enter the number of your choice: ")?;
-        let index = choice.parse::<usize>().map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "Invalid input"))?;
+        let index = choice.parse::<usize>().map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
         if index > 0 && index <= available_environments.len() {
             return Ok(available_environments[index - 1].to_string());
         }
@@ -230,11 +235,11 @@ fn load_projects_from_env() -> HashMap<String, ProjectConfig> {
                                 // If JSON parsing fails, try to parse as a custom format
                                 match parse_custom_format(&accounts_str) {
                                     Ok(accounts) => {
-                                        println!("Successfully parsed {} default accounts using custom format", accounts.len());
+                                        println!("Successfully parsed {} default accounts from custom format", accounts.len());
                                         Some(accounts)
                                     },
                                     Err(e) => {
-                                        println!("Failed to parse default accounts using custom format: {}", e);
+                                        println!("Failed to parse default accounts from custom format: {}", e);
                                         None
                                     }
                                 }
@@ -242,12 +247,15 @@ fn load_projects_from_env() -> HashMap<String, ProjectConfig> {
                         }
                     });
 
-                projects.insert(project_name.to_string(), ProjectConfig {
-                    region: value,
-                    pool_id,
-                    client_id,
-                    default_accounts,
-                });
+                projects.insert(
+                    project_name.to_string(),
+                    ProjectConfig {
+                        region: value,
+                        pool_id,
+                        client_id,
+                        default_accounts,
+                    },
+                );
             }
         }
     }
@@ -256,24 +264,21 @@ fn load_projects_from_env() -> HashMap<String, ProjectConfig> {
 }
 
 fn select_or_enter_credentials(default_accounts: &[DefaultAccount]) -> io::Result<(String, String)> {
-    println!("Default accounts available:");
+    println!("Select a default account or enter new credentials:");
     for (i, account) in default_accounts.iter().enumerate() {
         println!("{}. {}", i + 1, account.username);
     }
-    println!("{}. Enter credentials manually", default_accounts.len() + 1);
+    println!("{}. Enter new credentials", default_accounts.len() + 1);
 
-    loop {
-        let choice = get_user_input("Enter the number of your choice: ")?;
-        let index = choice.parse::<usize>().map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "Invalid input"))?;
+    let choice = get_user_input("Enter the number of your choice: ")?;
+    let index = choice.parse::<usize>().map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))? - 1;
 
-        if index > 0 && index <= default_accounts.len() {
-            let selected_account = &default_accounts[index - 1];
-            return Ok((selected_account.username.clone(), selected_account.password.clone()));
-        } else if index == default_accounts.len() + 1 {
-            let username = get_user_input("Enter your username: ")?;
-            let password = read_password_with_prompt("Enter your password: ")?;
-            return Ok((username, password));
-        }
-        println!("Invalid choice. Please try again.");
+    if index < default_accounts.len() {
+        let account = &default_accounts[index];
+        Ok((account.username.clone(), account.password.clone()))
+    } else {
+        let username = get_user_input("Enter your username: ")?;
+        let password = read_password_with_prompt("Enter your password: ")?;
+        Ok((username, password))
     }
 }
