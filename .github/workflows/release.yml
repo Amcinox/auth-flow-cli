@@ -72,7 +72,26 @@ jobs:
     - name: Build
       run: cargo build --release
 
-    - name: Upload Release Asset
+    - name: Prepare macOS binary
+      if: matrix.os == 'macos-latest'
+      run: |
+        chmod +x target/release/${{ matrix.artifact_name }}
+        # Create a ZIP archive for macOS
+        zip -j ${{ matrix.asset_name }}.zip target/release/${{ matrix.artifact_name }}
+
+    - name: Upload Release Asset (macOS)
+      if: matrix.os == 'macos-latest'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create_release.outputs.upload_url }}
+        asset_path: ./${{ matrix.asset_name }}.zip
+        asset_name: ${{ matrix.asset_name }}.zip
+        asset_content_type: application/zip
+
+    - name: Upload Release Asset (non-macOS)
+      if: matrix.os != 'macos-latest'
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
