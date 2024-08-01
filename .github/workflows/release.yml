@@ -1,0 +1,76 @@
+name: Release Auth Flow CLI
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  create_release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Get version
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Auth Flow CLI ${{ steps.get_version.outputs.version }}
+          body: |
+            Release of Auth Flow CLI version ${{ steps.get_version.outputs.version }}
+            
+            For full details, see the [CHANGELOG.md](https://github.com/Amcinox/auth-flow-cli/blob/main/CHANGELOG.md)
+          draft: false
+          prerelease: false
+
+  build_and_release:
+    name: Build and Release
+    needs: create_release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            artifact_name: auth-flow-cli
+            asset_name: auth-flow-cli-linux-${{ needs.create_release.outputs.version }}
+          - os: macos-latest
+            artifact_name: auth-flow-cli
+            asset_name: auth-flow-cli-macos-${{ needs.create_release.outputs.version }}
+          - os: windows-latest
+            artifact_name: auth-flow-cli.exe
+            asset_name: auth-flow-cli-windows-${{ needs.create_release.outputs.version }}.exe
+
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+
+    - name: Build
+      run: cargo build --release
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create_release.outputs.upload_url }}
+        asset_path: ./target/release/${{ matrix.artifact_name }}
+        asset_name: ${{ matrix.asset_name }}
+        asset_content_type: application/octet-stream
