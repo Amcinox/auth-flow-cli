@@ -2,8 +2,8 @@ name: Release Auth Flow CLI
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - master
 
 jobs:
   create_release:
@@ -18,7 +18,8 @@ jobs:
 
       - name: Get version
         id: get_version
-        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        run: |
+          echo "version=$(date +'%Y.%m.%d.%H%M')" >> $GITHUB_OUTPUT
 
       - name: Create Release
         id: create_release
@@ -26,12 +27,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref }}
+          tag_name: v${{ steps.get_version.outputs.version }}
           release_name: Auth Flow CLI ${{ steps.get_version.outputs.version }}
           body: |
             Release of Auth Flow CLI version ${{ steps.get_version.outputs.version }}
             
-            For full details, see the [CHANGELOG.md](https://github.com/Amcinox/auth-flow-cli/blob/main/CHANGELOG.md)
+            This release was automatically created from the latest changes merged into the master branch.
+            
+            For full details, see the [CHANGELOG.md](https://github.com/Amcinox/auth-flow-cli/blob/master/CHANGELOG.md)
           draft: false
           prerelease: false
 
